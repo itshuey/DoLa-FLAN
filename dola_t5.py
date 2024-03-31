@@ -27,9 +27,12 @@ class DoLaT5:
         self.model.to(device)
 
     def load_model(self, model_name):
-        if "t5" in model_name or "flan-t5" in model_name:
+        if "t5" in model_name:
             tokenizer = T5Tokenizer.from_pretrained(model_name)
-            model = T5ForConditionalGeneration.from_pretrained(model_name)
+            if 'xxl' in model_name:
+                model = T5ForConditionalGeneration.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
+            else:
+                model = T5ForConditionalGeneration.from_pretrained(model_name)
         else:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
