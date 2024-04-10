@@ -219,6 +219,7 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    premature_layer_dist: Optional[Dict[int, int]] = None
 
 
 @dataclass
@@ -2647,15 +2648,18 @@ class GenerationMixin:
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-            
             # forward pass to get next token
-            dict_outputs, outputs = self(
+            # dict_outputs, outputs = self(
+            all_outputs = self(
                 **model_inputs,
                 return_dict=True,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 early_exit_layers=early_exit_layers,
             )
+
+            dict_outputs = all_outputs[0]
+            outputs = all_outputs[1]
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
@@ -2769,6 +2773,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    premature_layer_dist=premature_layer_dist,
                 )
             else:
                 return GreedySearchDecoderOnlyOutput(
