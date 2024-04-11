@@ -109,8 +109,8 @@ class DoLa:
                     print("\nTRACKING TOKEN INDICES")
                     for layer_logits in logits_by_layer[token_idx]:
                         position_str = ""
-                        sorted_values, sorted_indices = torch.sort(layer_logits[0])
-                        sorted_positions = {int(idx): int(sorted_indices.tolist().index(idx)) for idx in tokens_to_track}
+                        sorted_logits, sorted_tokens = torch.sort(layer_logits[0])
+                        sorted_positions = {int(t): int(sorted_tokens.tolist().index(t)) for t in tokens_to_track}
                         for token_id, position in sorted_positions.items():
                             token = self.tokenizer.decode(token_id, skip_special_tokens=True)
                             position_str += f'Token "{token}" Position {position}, '
