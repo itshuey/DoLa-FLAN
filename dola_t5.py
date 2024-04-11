@@ -90,6 +90,17 @@ class DoLa:
                                         mature_layer=mature_layer, premature_layer=None, candidate_premature_layers=candidate_premature_layers, **kwargs,)
                 premature_layer_dist = outputs.premature_layer_dist
             sequences, scores = outputs.sequences, outputs.scores
+            js_divs, top_logits_by_layer = outputs.js_divs, outputs.top_logits_by_layer
+
+            for token_idx in range(len(js_divs)):
+                print("JS DIVERGENCES:")
+                print(js_divs[token_idx])
+                print("\nTOKEN PREDICTIONS BY LAYER")
+                layer_logits = top_logits_by_layer[token_idx]
+                for layer_stats in layer_logits:
+                    print(layer_stats.values)
+                    print(self.tokenizer.decode(layer_stats.indices, skip_special_tokens=True))
+                print()
 
             # skip the tokens in the input prompt
             # gen_sequences = sequences[:, input_ids.shape[-1]:][0, :]
