@@ -2724,9 +2724,9 @@ class GenerationMixin:
                 if output_jsd_and_logits:
                     js_divs_all += (js_divs,)
                     layer_logits = [dict_outputs[i][:, -1, :] for i in candidate_premature_layers]
-                    layer_logits.append[dict_outputs[mature_layer][:, -1, :]]
+                    layer_logits.append(dict_outputs[mature_layer][:, -1, :])
                     processed_logits = [logits_processor(input_ids, layer_log) for layer_log in layer_logits]
-                    processed_logits.append[next_tokens_scores]
+                    processed_logits.append(next_tokens_scores)
                     top_3_per_layer = [torch.topk(l,3,sorted=True) for l in processed_logits]
                     top_logits_all += (top_3_per_layer,)
                 if output_scores:
