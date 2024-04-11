@@ -92,15 +92,19 @@ class DoLa:
             sequences, scores = outputs.sequences, outputs.scores
             js_divs, top_logits_by_layer = outputs.js_divs, outputs.top_logits_by_layer
 
-            for token_idx in range(len(js_divs)):
-                print("JS DIVERGENCES:")
-                print(js_divs[token_idx])
-                print("\nTOKEN PREDICTIONS BY LAYER")
-                layer_logits = top_logits_by_layer[token_idx]
-                for layer_stats in layer_logits:
-                    print(layer_stats.values)
-                    print(self.tokenizer.decode(layer_stats.indices, skip_special_tokens=True))
-                print()
+            if js_divs is not None:
+                for token_idx in range(len(js_divs)):
+                    print("JS DIVERGENCES:")
+                    print(js_divs[token_idx])
+                    print("\nTOKEN PREDICTIONS BY LAYER")
+                    layer_logits = top_logits_by_layer[token_idx]
+                    for layer_stats in layer_logits:
+                        layer_str = ""
+                        for i in range(3):
+                            tk = self.tokenizer.decode(layer_stats.indices[0][i], skip_special_tokens=True)
+                            layer_str += (f'Token "{tk}": {layer_stats.values[0][i]}, ')
+                            print(layer_str)
+                    print()
 
             # skip the tokens in the input prompt
             # gen_sequences = sequences[:, input_ids.shape[-1]:][0, :]
