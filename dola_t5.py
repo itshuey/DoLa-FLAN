@@ -90,20 +90,34 @@ class DoLa:
                                         mature_layer=mature_layer, premature_layer=None, candidate_premature_layers=candidate_premature_layers, **kwargs,)
                 premature_layer_dist = outputs.premature_layer_dist
             sequences, scores = outputs.sequences, outputs.scores
-            js_divs, top_logits_by_layer = outputs.js_divs, outputs.top_logits_by_layer
+            js_divs, logits_by_layer = outputs.js_divs, outputs.logits_by_layer
 
             if js_divs is not None:
+                k = 5
                 for token_idx in range(len(js_divs)):
                     print("JS DIVERGENCES:")
                     print(js_divs[token_idx])
                     print("\nTOKEN PREDICTIONS BY LAYER")
-                    layer_logits = top_logits_by_layer[token_idx]
-                    for layer_stats in layer_logits:
+                    token_layer_logits = logits_by_layer[token_idx]
+                    for layer_dist in token_layer_logits:
                         layer_str = ""
-                        for i in range(3):
-                            tk = self.tokenizer.decode(layer_stats.indices[0][i], skip_special_tokens=True)
-                            layer_str += (f'Token "{tk}": {layer_stats.values[0][i]}, ')
-                            print(layer_str)
+                        top_k_logits = [torch.topk(l,k,sorted=True) for l in layer_dist]
+                        for i, enc_token in range(top_k_logits.indices):
+                            token = self.tokenizer.decode(enc_token, skip_special_tokens=True)
+                            layer_str += (f'Token "{token}": {top_k_logits.values[i]}, ')
+                        print(layer_str[:-2])
+                        tokens_to_track = top_k_logits.indices
+                    print("\nTRACKING TOKEN INDICES")
+                    for layer_dist in token_layer_logits:
+                        position_str = ""
+                        indexed_logits = list(enumerate(token_layer_logits))
+                        sorted_indexed_logits = sorted(indexed_logits, key=lambda x: x[1])
+                        sorted_positions = {token_id: idx for idx, (token_id, _) 
+                                         in enumerate(sorted_indexed_logits) if token_id in tokens_to_track}
+                        for token_id, position in sorted_positions.items():
+                            token = self.tokenizer.decode(token_id, skip_special_tokens=True)
+                            position_str += f'Token "{token}" Position {position}, '
+                        print(position_str[:-2])
                     print()
 
             # skip the tokens in the input prompt

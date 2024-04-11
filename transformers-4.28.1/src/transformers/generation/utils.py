@@ -211,7 +211,7 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
         js_divs
-        top_logits_by_layer
+        logits_by_layer
     """
 
     sequences: torch.LongTensor = None
@@ -223,7 +223,7 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     premature_layer_dist: Optional[Dict[int, int]] = None
     js_divs: Optional[Tuple[torch.FloatTensor]] = None
-    top_logits_by_layer: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    logits_by_layer: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
 @dataclass
@@ -2616,7 +2616,7 @@ class GenerationMixin:
         cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
         js_divs_all = () if (return_dict_in_generate and output_jsd_and_logits) else None
-        top_logits_all = () if (return_dict_in_generate and output_jsd_and_logits) else None
+        logits_by_layer = () if (return_dict_in_generate and output_jsd_and_logits) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
@@ -2727,8 +2727,7 @@ class GenerationMixin:
                     layer_logits.append(dict_outputs[mature_layer][:, -1, :])
                     processed_logits = [logits_processor(input_ids, layer_log) for layer_log in layer_logits]
                     processed_logits.append(next_tokens_scores)
-                    top_3_per_layer = [torch.topk(l,3,sorted=True) for l in processed_logits]
-                    top_logits_all += (top_3_per_layer,)
+                    logits_by_layer += (processed_logits,)
                 if output_scores:
                     scores += (next_tokens_scores,)
                 if output_attentions:
@@ -2791,7 +2790,7 @@ class GenerationMixin:
                     decoder_hidden_states=decoder_hidden_states,
                     premature_layer_dist=premature_layer_dist,
                     js_divs=js_divs_all,
-                    top_logits_by_layer=top_logits_all
+                    logits_by_layer=logits_by_layer
                 )
             else:
                 return GreedySearchDecoderOnlyOutput(
@@ -2801,7 +2800,7 @@ class GenerationMixin:
                     hidden_states=decoder_hidden_states,
                     premature_layer_dist=premature_layer_dist,
                     js_divs=js_divs_all,
-                    top_logits_by_layer=top_logits_all
+                    logits_by_layer=logits_by_layer
                 )
         else:
             return input_ids
