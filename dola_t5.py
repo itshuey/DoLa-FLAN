@@ -98,22 +98,19 @@ class DoLa:
                     print("JS DIVERGENCES:")
                     print(js_divs[token_idx])
                     print("\nTOKEN PREDICTIONS BY LAYER")
-                    token_layer_logits = logits_by_layer[token_idx]
-                    for layer_dist in token_layer_logits:
+                    top_k_layer_logits = [torch.topk(l,k,sorted=True) for l in logits_by_layer[token_idx]]
+                    for top_k_logits in top_k_layer_logits:
                         layer_str = ""
-                        top_k_logits = [torch.topk(l,k,sorted=True) for l in layer_dist]
-                        for i, enc_token in range(top_k_logits.indices):
+                        for i, enc_token in enumerate(top_k_logits.indices[0]):
                             token = self.tokenizer.decode(enc_token, skip_special_tokens=True)
-                            layer_str += (f'Token "{token}": {top_k_logits.values[i]}, ')
+                            layer_str += (f'Token "{token}": {top_k_logits.values[0][i]}, ')
                         print(layer_str[:-2])
-                        tokens_to_track = top_k_logits.indices
+                        tokens_to_track = top_k_logits.indices[0]
                     print("\nTRACKING TOKEN INDICES")
-                    for layer_dist in token_layer_logits:
+                    for layer_logits in logits_by_layer[token_idx]:
                         position_str = ""
-                        indexed_logits = list(enumerate(token_layer_logits))
-                        sorted_indexed_logits = sorted(indexed_logits, key=lambda x: x[1])
-                        sorted_positions = {token_id: idx for idx, (token_id, _) 
-                                         in enumerate(sorted_indexed_logits) if token_id in tokens_to_track}
+                        sorted_values, sorted_indices = torch.sort(layer_logits[0])
+                        sorted_positions = {int(idx): int(sorted_indices.tolist().index(idx)) for idx in tokens_to_track}
                         for token_id, position in sorted_positions.items():
                             token = self.tokenizer.decode(token_id, skip_special_tokens=True)
                             position_str += f'Token "{token}" Position {position}, '
