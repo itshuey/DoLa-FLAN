@@ -1,223 +1,144 @@
-DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models
+Enhancing Instruction-Following Capabilities in Seq2Seq Models: A Novel Adaptation of DoLa in T5 and FLAN-T5
 ===
+Work by Anabel Y., Lorenzo G., Huey S., Felipe J, Anthony H., Harman C.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-g.svg)](https://opensource.org/licenses/MIT)
-[![Arxiv](https://img.shields.io/badge/arXiv-2309.03883-B21A1B)](https://arxiv.org/abs/2309.03883)
-[![Hugging Face Transformers](https://img.shields.io/badge/%F0%9F%A4%97-Transformers-blue)](https://github.com/huggingface/transformers)
-[![Tweet](https://img.shields.io/twitter/url/http/shields.io.svg?style=social)](https://twitter.com/YungSungChuang/status/1701623359153316255)
-[![GitHub Stars](https://img.shields.io/github/stars/voidism/DoLa?style=social)](https://github.com/voidism/DoLa/stargazers)
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/voidism/DoLa/blob/master/dola_evaluation.ipynb)
-
-Code for the paper "DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models"
+Based on a fork of "DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models"
 
 Paper: https://arxiv.org/abs/2309.03883  
 Authors: [Yung-Sung Chuang](https://people.csail.mit.edu/yungsung/) $^\dagger$, [Yujia Xie](https://sites.google.com/view/yujia) $^\ddagger$, [Hongyin Luo](https://luohongyin.github.io/) $^\dagger$, [Yoon Kim](https://people.csail.mit.edu/yoonkim/) $^\dagger$, [James Glass](https://people.csail.mit.edu/jrg/) $^\dagger$, [Pengcheng He](https://scholar.google.com/citations?user=TS1RoxAAAAAJ&hl=en) $^\ddagger$  
 $^\dagger$ Massachusetts Institute of Technology, $^\ddagger$ Microsoft
 
-## Overview
+# Overview
+The repository for "Enhancing Instruction-Following Capabilities in Seq2Seq Models: A Novel Adaptation of DoLa in T5 and FLAN-T5".
 
-![DoLa](figure.png)
+## DoLA strategy
 
-Despite their impressive capabilities, large language models (LLMs) are prone to hallucinations, i.e., generating content that deviates from  facts seen during pretraining. We propose a simple decoding strategy for reducing hallucinations with pretrained LLMs that does not require conditioning on retrieved external knowledge nor additional fine-tuning. Our approach obtains the next-token distribution by contrasting the differences in logits obtained from projecting the later layers versus earlier layers to the vocabulary space, exploiting the fact that factual knowledge in an LLMs has generally been shown to be localized to particular transformer layers. We find that this **D**ecoding by c**o**ntrasting **La**yers (DoLA) approach is able to better surface factual knowledge and reduce the generation of incorrect facts.  DoLA consistently improves the truthfulness across multiple choices tasks and open-ended generation tasks, for example improving performance of LLaMA family models on TruthfulQA by 12-17\% absolute points, demonstrating its potential in making LLMs reliably generate truthful facts.
+A novel decoding strategy aimed at reducing hallucinations in large language models (LLMs) without the need for external knowledge retrieval or additional fine-tuning is adapted to improve on instruction-following in seq2seq. 
 
-## Setup
+At its core, DoLA (Decoding by contrasting layers) contrasts the knowledge embedded in different layers of a transformer model. By comparing the logits from earlier (less mature) and later (more mature) layers, DoLA aims to filter out hallucinated content, favoring more factual outputs.
 
-```
-pip install -e transformers-4.28.1
-pip install datasets
-pip install accelerate
-pip install openai # -> only for truthfulqa and gpt4_eval
-```
+## Main Files (with Detailed Docs)
+- `dola_t5.py` A class DoLaT5 is defined for working with a T5 model, supporting various generation and scoring methods, including baseline, DOLA-static, and DOLA modes. It's designed to run on either CPU or GPU, with support for multi-GPU setups.
+- `ifeval_eval.py` Script to evaluate the language model's performance on a given dataset. Uses the Hugging Face Transformers library to load and interact with pre-trained models. It handles different configurations and modes of operation, including parallel processing and early exit strategies for efficient inference.
+- `memotrap_dataset_eval.py` Script to evaluate the performance of language models, specifically focusing on their ability to generate correct endings for given prompts. It utilizes a dataset loaded from a CSV file and supports different configurations and modes for the language model, including the use of DoLa and DoLaT5 models for improved factuality.
 
-## Experiments
+## Repository Structure and Key Components
+- `Scripts and Usage:` The provided scripts are straightforward to use, requiring only the specification of the model, dataset paths, and the desired decoding strategy through command-line arguments. This design makes it easy to replicate the experiments or apply DoLA to new models and tasks.
 
-### Arguments
+- `Evaluation Framework:` The inclusion of evaluation scripts for specific tasks and datasets, along with instructions for using external tools for response comparison, offers a comprehensive framework for assessing the effectiveness of DoLA in enhancing the factuality of LLMs.
 
-| Argument          | Example           | Description   |
-| ----------------- | ----------------- | ------------- |
-| `--model-name`    | `huggyllama/llama-7b` | Specifies the model you want to use, currently we only support LLaMA-v1. |
-| `--data-path`     | `/path/to/dataset` | Path to the dataset file or folder. |
-| `--output-path`   | `output-path.json` | Where to store the output results. |
-| `--num-gpus`      | `1` | Number of GPUs to use, `1/2/4/8` for `7B/13B/30B/65B` model sizes respectively.  |
-| `--max_gpu_memory`| `27` | Maximum GPU memory size (in GiB) to allocate. Default: 27 (for 32G V100).  |
+# `dola_t5.py` Docs
+The `dola_t5.py` script defines a class DoLaT5 for working with a T5 model, supporting various generation and scoring methods, including baseline, DOLA-static, and DOLA modes. It's designed to run on either CPU or GPU, with support for multi-GPU setups. The script is structured into several key components:
 
-### Understanding `--early-exit-layers`
+1. Initialization: The __init__ method initializes the class with model details, device configuration, and loads the model and tokenizer.
 
-The `--early-exit-layers` argument takes a string containing a sequence of layer numbers separated by commas, with no spaces in between. By specifying different number of layers, we make the model decode at different modes.
+2. Model Loading: `load_model` loads the T5 model and tokenizer. It configures the model for efficient memory usage on GPUs and supports distributing the model across multiple GPUs if specified.
+
+3. Stopping Criteria: `set_stop_words` allows setting custom stopping criteria for generation, using the T5StoppingCriteria.
+
+4. Text Generation: The `generate` method supports text generation in three modes:
+
+- `baseline`: Standard text generation.
+
+- `dola-static`: Uses specified mature and premature layers for DOLA decoding.
+
+- `dola`: Dynamically selects the premature layer based on divergence from the mature layer's output.
+
+It supports various generation parameters like `max_new_tokens, top_p, top_k`, and temperature. The method can also remove specified stop words from the output.
+
+5. Relative Top Filtering: `get_relative_top_filter` is a utility for applying a relative top filter based on the scores' softmax values, used in DOLA modes for filtering logits.
+
+6. Language Modeling Score: `lm_score` calculates the language modeling score for a given text, supporting the same three modes as text generation. It can compute scores based on the difference in logits between layers (for DOLA modes) and supports PMI calculation.
+
+7. Utility Methods: The script includes methods for softmax normalization, KL divergence calculation, and JS divergence calculation for selecting the premature layer in DOLA mode.
+
+Key functionalities include:
+
+- DOLA Decoding: Dynamically selects layers for decoding based on divergence, aiming to improve generation quality.
+
+- Efficient Memory Usage: Configures the model for low memory usage on CPUs and efficient distribution across multiple GPUs.
+
+- Custom Stopping Criteria: Allows specifying custom stopping words for generation tasks.
 
 
-| Number of Layers Specified  | Example (str)     | Description of Decoding Mode                                                                                     |
-| ---------------------------| ------------- | ----------------------------------------------------------------------------------------------- |
-| 1                          | `-1`      | **Naive decoding** from the final layer output.       |
-| 2                          | `16,32`   | **DoLa-static decoding** with the second specified layer (i.e. `32`) as the `mature_layer` and first specified layer (i.e. `16`) as `premature_layer`. |
-| >2                         | `0,2,4,6,8,10,12,14,32`    | **DoLa decoding** with the last specified layer (i.e. `32`) as the `mature_layer` and all the preceding layers (i.e. `0,2,4,6,8,10,12,14`) as `candidate_premature_layers`. |
+# `ifeval_eval.py` Docs
+Script to evaluate the language model's performance on a given dataset. Uses the Hugging Face Transformers library to load and interact with pre-trained models. It handles different configurations and modes of operation, including parallel processing and early exit strategies for efficient inference.
 
-### FACTOR (Multiple Choices)
-Please download the data file `wiki_factor.csv` from https://github.com/AI21Labs/factor
+It is structured as follows:
+1. Imports and Setup: The script imports necessary libraries and sets up regular expressions and constants. It suppresses logging messages from the Transformers library to reduce clutter.
 
-#### Baseline
-```bash
-python factor_eval.py --model-name huggyllama/llama-7b --data-path /path/to/wiki_factor.csv --output-path output-path.json --num-gpus 1
-python factor_eval.py --model-name huggyllama/llama-13b --data-path /path/to/wiki_factor.csv --output-path output-path.json --num-gpus 2
-python factor_eval.py --model-name huggyllama/llama-30b --data-path /path/to/wiki_factor.csv --output-path output-path.json --num-gpus 4
-python factor_eval.py --model-name huggyllama/llama-65b --data-path /path/to/wiki_factor.csv --output-path output-path.json --num-gpus 8
-```
+2. Functions:
 
-#### DoLa
-```bash
-python factor_eval.py --model-name huggyllama/llama-7b --early-exit-layers 0,2,4,6,8,10,12,14,32 --data-path /path/to/wiki_factor.csv --output-path output-path.json --num-gpus 1
-python factor_eval.py --model-name huggyllama/llama-13b --early-exit-layers 0,2,4,6,8,10,12,14,16,18,40 --data-path /path/to/wiki_factor.csv --output-path output-path.json --num-gpus 2
-python factor_eval.py --model-name huggyllama/llama-30b --early-exit-layers 0,2,4,6,8,10,12,14,16,18,60 --data-path /path/to/wiki_factor.csv --output-path output-path.json --num-gpus 4
-python factor_eval.py --model-name huggyllama/llama-65b --early-exit-layers 0,2,4,6,8,10,12,14,16,18,80 --data-path /path/to/wiki_factor.csv --output-path output-path.json --num-gpus 8
-```
+- load_jsonl(file_path): Loads a JSONL file and returns a list of prompts extracted from it.
 
-### TruthfulQA (Multiple Choices)
+- create_demo_text(): Creates a demonstration text with questions and answers to be prepended to the input prompts.
 
-The `--data-path` should be a folder contains `TruthfulQA.csv`. If file not exists, it will be downloaded automatcially.
+- build_prompt(input_text): Builds the final prompt by appending the input text to the demonstration text.
 
-#### Baseline
-```bash
-python tfqa_mc_eval.py --model-name huggyllama/llama-7b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 1
-python tfqa_mc_eval.py --model-name huggyllama/llama-13b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 2
-python tfqa_mc_eval.py --model-name huggyllama/llama-30b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 4
-python tfqa_mc_eval.py --model-name huggyllama/llama-65b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 8
-```
+3. Argument Parsing: The script uses argparse to parse command-line arguments, allowing users to specify the model name, device, data path, and other configurations.
 
-#### DoLa
-```bash
-python tfqa_mc_eval.py --model-name huggyllama/llama-7b --early-exit-layers 16,18,20,22,24,26,28,30,32 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 1
-python tfqa_mc_eval.py --model-name huggyllama/llama-13b --early-exit-layers 20,22,24,26,28,30,32,34,36,38,40 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 2
-python tfqa_mc_eval.py --model-name huggyllama/llama-30b --early-exit-layers 40,42,44,46,48,50,52,54,56,58,60 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 4
-python tfqa_mc_eval.py --model-name huggyllama/llama-65b --early-exit-layers 60,62,64,66,68,70,72,74,76,78,80 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 8
-```
+4. Data Preparation: It loads the dataset from a specified path and optionally limits the number of prompts for debugging or splits the dataset for parallel processing.
 
-### TruthfulQA
+5. Model Initialization: Depending on the model name, it initializes either DoLa or DoLaT5 class, which are presumably custom classes for handling language model inference. The script sets stop words to signal the end of a generation.
 
-To evaluate the open-ended generation result of TruthfulQA, we need to finetune two GPT-3 curie models through OpenAI API:
+6. Early Exit Layers Configuration: It configures early exit layers for the model, which is a technique to improve inference efficiency by exiting the model's forward pass early under certain conditions. The script supports three modes:
 
-```
-openai api fine_tunes.create -t finetune_truth.jsonl -m curie --n_epochs 5 --batch_size 21 --learning_rate_multiplier 0.1
-openai api fine_tunes.create -t finetune_info.jsonl -m curie --n_epochs 5 --batch_size 21 --learning_rate_multiplier 0.1
-```
+- baseline: Standard decoding without early exit.
 
-After finetuning, we can obtain the finetuned model names by `openai api fine_tunes.list | grep fine_tuned_model`.
+- early_exit_contrastive: Uses a specific mature and premature layer for early exit.
 
-Create a config file `gpt3.config.json` like this:
+- dola: Dynamically chooses from a set of candidate premature layers based on certain criteria.
 
-```json
-{"gpt_info": "curie:ft-xxxxxxxxxx",
-"gpt_truth": "curie:ft-xxxxxxxxxx",
-"api_key": "xxxxxxx"}
-```
+7. Inference Loop: For each prompt in the dataset, the script:
 
-Add the argument `--do-rating --gpt3-config gpt3.config.json` for GPT-3 evaluation.
+- Builds the full prompt using build_prompt.
 
-#### Baseline
-```bash
-python tfqa_eval.py --model-name huggyllama/llama-7b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 1 --do-rating --gpt3-config /path/to/gpt3.config.json
-python tfqa_eval.py --model-name huggyllama/llama-13b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 2 --do-rating --gpt3-config /path/to/gpt3.config.json
-python tfqa_eval.py --model-name huggyllama/llama-30b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 4 --do-rating --gpt3-config /path/to/gpt3.config.json
-python tfqa_eval.py --model-name huggyllama/llama-65b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 8 --do-rating --gpt3-config /path/to/gpt3.config.json
-```
+- Generates a completion using the model with specified generation parameters.
 
-#### DoLa
-```bash
-python tfqa_eval.py --model-name huggyllama/llama-7b --early-exit-layers 16,18,20,22,24,26,28,30,32 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 1 --do-rating --gpt3-config /path/to/gpt3.config.json
-python tfqa_eval.py --model-name huggyllama/llama-13b --early-exit-layers 20,22,24,26,28,30,32,34,36,38,40 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 2 --do-rating --gpt3-config /path/to/gpt3.config.json
-python tfqa_eval.py --model-name huggyllama/llama-30b --early-exit-layers 40,42,44,46,48,50,52,54,56,58,60 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 4 --do-rating --gpt3-config /path/to/gpt3.config.json
-python tfqa_eval.py --model-name huggyllama/llama-65b --early-exit-layers 60,62,64,66,68,70,72,74,76,78,80 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 8 --do-rating --gpt3-config /path/to/gpt3.config.json
-```
+- Cleans up the generated text by removing stop words.
 
-### GSM8K
+- Optionally, tracks the usage of premature layers in dola mode.
 
-We use a random sampled subset of GSM8K training set to serve as the validation set of both StrategyQA and GSM8K. The file can be downloaded [here](https://www.dropbox.com/scl/fi/o8zde51x0erejbp8bo8d5/gsm8k-train-sub.jsonl?rlkey=yu90sjt58fk1cell3ey4v8xuu&dl=0).
+- Results Handling: The script collects the prompts and their corresponding model completions in a list of dictionaries.
 
-The `--data-path` argument should be either:
-- A folder that contains `gsm8k_test.jsonl`, otherwise the files will be downloaded automatically to the folder you specified. 
-- (Only for GSM8K) The path to `gsm8k-train-sub.jsonl` which can be downloaded by the link above.
+9. Output: Finally, it saves the results to a JSONL file in the specified output path. If parallel processing is enabled, it appends the shard ID to the output filename.
 
-#### Baseline
-```bash
-python gsm8k_eval.py --model-name huggyllama/llama-7b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 1
-python gsm8k_eval.py --model-name huggyllama/llama-13b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 2
-python gsm8k_eval.py --model-name huggyllama/llama-30b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 4
-python gsm8k_eval.py --model-name huggyllama/llama-65b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 8
-```
+# `memotrap_dataset_eval.py` Docs
+Script to evaluate the performance of language models, specifically focusing on their ability to generate correct endings for given prompts. It utilizes a dataset loaded from a CSV file and supports different configurations and modes for the language model, including the use of DoLa and DoLaT5 models for improved factuality.
+1. Imports and Initial Setup: The script imports necessary libraries and sets up logging and constants. It defines regular expressions for parsing answers and initializes flags for debugging and other configurations.
 
-#### DoLa
-```bash
-python gsm8k_eval.py --model-name huggyllama/llama-7b --early-exit-layers 0,2,4,6,8,10,12,14,32 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 1
-python gsm8k_eval.py --model-name huggyllama/llama-13b --early-exit-layers 0,2,4,6,8,10,12,14,16,18,40 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 2
-python gsm8k_eval.py --model-name huggyllama/llama-30b --early-exit-layers 0,2,4,6,8,10,12,14,16,18,60 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 4
-python gsm8k_eval.py --model-name huggyllama/llama-65b --early-exit-layers 0,2,4,6,8,10,12,14,16,18,80 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 8
-```
+2. Utility Functions:
 
-### StrategyQA
+- parse_classes: Parses a string representation of a list into an actual list of strings.
 
-The `--data-path` argument should be a folder that contains `strategyqa_train.json`, otherwise the files will be downloaded automatically to the folder you specified.
+- load_csv: Loads data from a CSV file, parsing each line into a dictionary with keys for the prompt, possible classes (answers), and the correct answer index.
 
-#### Baseline
-```bash
-python strqa_eval.py --model-name huggyllama/llama-7b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 1
-python strqa_eval.py --model-name huggyllama/llama-13b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 2
-python strqa_eval.py --model-name huggyllama/llama-30b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 4
-python strqa_eval.py --model-name huggyllama/llama-65b --data-path /path/to/data/folder --output-path output-path.json --num-gpus 8
-```
+- extract_and_compare_answer: Extracts the model's generated answer ending and compares it with the correct answer to determine correctness.
 
-#### DoLa
-```bash
-python strqa_eval.py --model-name huggyllama/llama-7b --early-exit-layers 0,2,4,6,8,10,12,14,32 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 1
-python strqa_eval.py --model-name huggyllama/llama-13b --early-exit-layers 0,2,4,6,8,10,12,14,16,18,40 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 2
-python strqa_eval.py --model-name huggyllama/llama-30b --early-exit-layers 0,2,4,6,8,10,12,14,16,18,60 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 4
-python strqa_eval.py --model-name huggyllama/llama-65b --early-exit-layers 0,2,4,6,8,10,12,14,16,18,80 --data-path /path/to/data/folder --output-path output-path.json --num-gpus 8
-```
+- create_demo_text: Generates a demo text with example questions and answers to be used in the prompt construction.
 
-### GPT-4 Evaluation (Vicuna QA Benchmark)
+- build_prompt: Constructs the input prompt for the model by appending the demo text and the specific question to be answered.
 
-In GPT-4 evaluation, we need the question file from [FastChat](https://github.com/lm-sys/FastChat). In the following commands, we assume the path to your FastChat repo is `$fastchat`.
+3. Argument Parsing: The script uses argparse to handle command-line arguments for model configuration, dataset paths, and evaluation settings.
 
-#### Baseline
-```bash
-python gpt4_judge_eval.py --model-name huggyllama/llama-7b --model-id llama-7b-baseline --question-file $fastchat/eval/table/question.jsonl --answer-file output-answer.jsonl --num-gpus 1
-python gpt4_judge_eval.py --model-name huggyllama/llama-13b --model-id llama-13b-baseline --question-file $fastchat/eval/table/question.jsonl --answer-file output-answer.jsonl --num-gpus 2
-python gpt4_judge_eval.py --model-name huggyllama/llama-30b --model-id llama-30b-baseline --question-file $fastchat/eval/table/question.jsonl --answer-file output-answer.jsonl --num-gpus 4
-python gpt4_judge_eval.py --model-name huggyllama/llama-65b --model-id llama-65b-baseline --question-file $fastchat/eval/table/question.jsonl --answer-file output-answer.jsonl --num-gpus 8
-```
+4. Model Selection and Configuration: Based on the provided model name, the script selects between the DoLa and DoLaT5 models. It also sets up model-specific configurations like stop words, early exit layers, and repetition penalties.
 
-#### DoLa
-```bash
-python gpt4_judge_eval.py --model-name huggyllama/llama-7b --early-exit-layers 0,2,4,6,8,10,12,14,32 --model-id llama-7b-dola --question-file $fastchat/eval/table/question.jsonl --answer-file output-answer.jsonl --num-gpus 1
-python gpt4_judge_eval.py --model-name huggyllama/llama-13b --early-exit-layers 0,2,4,6,8,10,12,14,16,18,40 --model-id llama-13b-dola --question-file $fastchat/eval/table/question.jsonl --answer-file output-answer.jsonl --num-gpus 2
-python gpt4_judge_eval.py --model-name huggyllama/llama-30b --early-exit-layers 0,2,4,6,8,10,12,14,16,18,60 --model-id llama-30b-dola --question-file $fastchat/eval/table/question.jsonl --answer-file output-answer.jsonl --num-gpus 4
-python gpt4_judge_eval.py --model-name huggyllama/llama-65b --early-exit-layers 0,2,4,6,8,10,12,14,16,18,80 --model-id llama-65b-dola --question-file $fastchat/eval/table/question.jsonl --answer-file output-answer.jsonl --num-gpus 8
-```
+5. Data Preparation: The script loads the dataset from a CSV file. It supports debugging mode (which limits the data to the first 10 samples) and parallel processing mode (which divides the dataset into chunks based on shard IDs).
 
-After running the above commands to generate the model responses, we need OpenAI API key to pairwise compare the responses from different decoding results.
+6. Evaluation Loop:
 
-```bash
-python $fastchat/eval/eval_gpt_review.py -q $fastchat/eval/table/question.jsonl -a output-answer-1.jsonl output-answer-2.jsonl -p $fastchat/eval/table/prompt.jsonl -r $fastchat/eval/table/reviewer.jsonl -o output-review-path.jsonl -k openai_api_key
-```
+- For each sample in the dataset, it constructs the input prompt and generates model completions based on the provided arguments.
 
-For more details of GPT-4 evaluation, please check [vicuna-blog-eval](https://github.com/lm-sys/vicuna-blog-eval/tree/main/eval).
+- It then cleans the model completion by removing any stop words and trims whitespace.
 
-## Reference Repositories
-- FastChat: https://github.com/lm-sys/FastChat
-- ContrastiveDecoding: https://github.com/XiangLi1999/ContrastiveDecoding
-- TruthfulQA: https://github.com/sylinrl/TruthfulQA
-- zero_shot_cot: https://github.com/kojima-takeshi188/zero_shot_cot
-- FederatedScope: https://github.com/alibaba/FederatedScope
+- The script extracts the model's answer ending and compares it with the correct answer to determine correctness.
 
-## Citation
+- It accumulates results, including the model's completions, the generated answer endings, the correct answers, and correctness flags.
 
-[![DOI](https://img.shields.io/badge/DOI-10.48550/arXiv.2309.03883-green?color=FF8000?color=009922)](https://doi.org/10.48550/arXiv.2309.03883)
+7. Results Reporting and Saving:
 
-Please cite our paper if it's helpful to your work!
-```
-@article{chuang2023dola,
-  title={DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language Models},
-  author={Chuang, Yung-Sung and Xie, Yujia and Luo, Hongyin and Kim, Yoon and Glass, James and He, Pengcheng},
-  journal={arXiv preprint arXiv:2309.03883},
-  year={2023},
-}
-```
+- Calculates the overall accuracy of the model based on the correctness flags.
+
+- In "dola" mode with debugging enabled, it reports the usage statistics of premature layers.
+
+- Saves the evaluation results to a JSON file, with the filename optionally including the shard ID for parallel processing setups.
