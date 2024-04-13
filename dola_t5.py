@@ -8,7 +8,7 @@ import json
 import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM
-from transformers.generation.stopping_criteria import StoppingCriteriaList, LLamaQaStoppingCriteria, T5StoppingCriteria
+from transformers.generation.stopping_criteria import StoppingCriteriaList, T5StoppingCriteria
 
 import argparse
 import warnings
@@ -92,30 +92,8 @@ class DoLa:
             sequences, scores = outputs.sequences, outputs.scores
             js_divs, logits_by_layer = outputs.js_divs, outputs.logits_by_layer
 
-            if js_divs is not None:
-                k = 5
-                for token_idx in range(len(js_divs)):
-                    print("JS DIVERGENCES:")
-                    print(js_divs[token_idx])
-                    print("\nTOKEN PREDICTIONS BY LAYER")
-                    top_k_layer_logits = [torch.topk(l,k,sorted=True) for l in logits_by_layer[token_idx]]
-                    for top_k_logits in top_k_layer_logits:
-                        layer_str = ""
-                        for i, enc_token in enumerate(top_k_logits.indices[0]):
-                            token = self.tokenizer.decode(enc_token, skip_special_tokens=True)
-                            layer_str += (f'Token "{token}": {top_k_logits.values[0][i]}, ')
-                        print(layer_str[:-2])
-                        tokens_to_track = top_k_logits.indices[0]
-                    print("\nTRACKING TOKEN INDICES")
-                    for layer_logits in logits_by_layer[token_idx]:
-                        position_str = ""
-                        sorted_logits, sorted_tokens = torch.sort(layer_logits[0])
-                        sorted_positions = {int(t): int(sorted_tokens.tolist().index(t)) for t in tokens_to_track}
-                        for token_id, position in sorted_positions.items():
-                            token = self.tokenizer.decode(token_id, skip_special_tokens=True)
-                            position_str += f'Token "{token}" Position {position}, '
-                        print(position_str[:-2])
-                    print()
+            if js_divs is not None and logits_by_layer is not None:
+                self.print_detailed_layer_stats(js_divs, logits_by_layer)
 
             # skip the tokens in the input prompt
             # gen_sequences = sequences[:, input_ids.shape[-1]:][0, :]
@@ -138,6 +116,33 @@ class DoLa:
             torch.cuda.empty_cache()
 
         return output_str, (premature_layer_dist if mode == 'dola' else None)
+    
+    def print_detailed_layer_stats(self, js_divergences, logits_by_layer):
+        k = 5 # The number of results to show for each layer
+        for token_idx in range(len(js_divergences)):
+            # Print the JS Divergences for each layer
+            print("JS DIVERGENCES:")
+            print(js_divergences[token_idx])
+
+            print("\nTOKEN PREDICTIONS BY LAYER")
+            top_k_layer_logits = [torch.topk(l,k,sorted=True) for l in logits_by_layer[token_idx]]
+            for top_k_logits in top_k_layer_logits:
+                layer_str = ""
+                for i, enc_token in enumerate(top_k_logits.indices[0]):
+                    token = self.tokenizer.decode(enc_token, skip_special_tokens=True)
+                    layer_str += (f'Token "{token}": {top_k_logits.values[0][i]}, ')
+                print(layer_str[:-2])
+                tokens_to_track = top_k_logits.indices[0]
+            print("\nTRACKING TOKEN INDICES")
+            for layer_logits in logits_by_layer[token_idx]:
+                position_str = ""
+                sorted_logits, sorted_tokens = torch.sort(layer_logits[0], descending=True)
+                sorted_positions = {int(t): int(sorted_tokens.tolist().index(t)) for t in tokens_to_track}
+                for token_id, position in sorted_positions.items():
+                    token = self.tokenizer.decode(token_id, skip_special_tokens=True)
+                    position_str += f'Token "{token}" Position {position}, '
+                print(position_str[:-2])
+            print()
 
     def get_relative_top_filter(self, scores: torch.FloatTensor, relative_top: float = 0.1, min_tokens_to_keep: int = 1):
         scores_normalized = scores.log_softmax(dim=-1) 
